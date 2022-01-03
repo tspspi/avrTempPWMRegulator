@@ -240,17 +240,18 @@ static void httpHandleNotFound() {
   server.send(404, "text/plain", "Unknown URI");
 };
 static void httpHandleStatus() {
-  if(server.hasArg("chan0") && server.hasArg("chan1") && server.hasArg("chan2") && server.hasArg("chan3") && server.hasArg("chan4") && server.hasArg("chan5")) {
-    dwPWMDutyCycle[0] = httpHandleConfig__ReadValueArgs("chan0", 0, 1000, dwPWMDutyCycle[0]);
-    dwPWMDutyCycle[1] = httpHandleConfig__ReadValueArgs("chan1", 0, 1000, dwPWMDutyCycle[1]);
-    dwPWMDutyCycle[2] = httpHandleConfig__ReadValueArgs("chan2", 0, 1000, dwPWMDutyCycle[2]);
-    dwPWMDutyCycle[3] = httpHandleConfig__ReadValueArgs("chan3", 0, 1000, dwPWMDutyCycle[3]);
-    dwPWMDutyCycle[4] = httpHandleConfig__ReadValueArgs("chan4", 0, 1000, dwPWMDutyCycle[4]);
-    dwPWMDutyCycle[5] = httpHandleConfig__ReadValueArgs("chan5", 0, 1000, dwPWMDutyCycle[5]);
+  bool bUpdatePWM = false;
 
-    yield();
-    pwmSendDutyUpdate();
-    yield();
+  if(server.hasArg("chan0") { dwPWMDutyCycle[0] = httpHandleConfig__ReadValueArgs("chan0", 0, 1000, dwPWMDutyCycle[0]); bUpdatePWM = true; }
+  if(server.hasArg("chan1") { dwPWMDutyCycle[1] = httpHandleConfig__ReadValueArgs("chan1", 0, 1000, dwPWMDutyCycle[1]); bUpdatePWM = true; }
+  if(server.hasArg("chan2") { dwPWMDutyCycle[2] = httpHandleConfig__ReadValueArgs("chan2", 0, 1000, dwPWMDutyCycle[2]); bUpdatePWM = true; }
+  if(server.hasArg("chan3") { dwPWMDutyCycle[3] = httpHandleConfig__ReadValueArgs("chan3", 0, 1000, dwPWMDutyCycle[3]); bUpdatePWM = true; }
+  if(server.hasArg("chan4") { dwPWMDutyCycle[4] = httpHandleConfig__ReadValueArgs("chan4", 0, 1000, dwPWMDutyCycle[4]); bUpdatePWM = true; }
+  if(server.hasArg("chan5") { dwPWMDutyCycle[5] = httpHandleConfig__ReadValueArgs("chan5", 0, 1000, dwPWMDutyCycle[5]); bUpdatePWM = true; }
+  if(bUpdatePWM) {
+      yield();
+      pwmSendDutyUpdate();
+      yield();
   }
 
   sprintf(
