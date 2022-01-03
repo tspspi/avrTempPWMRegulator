@@ -52,32 +52,36 @@ static ESP8266WebServer httpServer(80);
 
 #define DEFAULT_INTERVAL__WIFIRECONNECT     15
 #define DEFAULT_INTERVAL__MQTTRECONNECT     15
+#define DEFAULT_INTERVAL__REPORT            30
 
 #define EEPROM_CONFIGURATION_OFFSET 0
 
 struct eepromConfiguration {
-  uint8_t   flags;
+  uint8_t             flags;
 
-  char      wifiSSID[32];
-  char      wifiPSK[32];
+  char                wifiSSID[32];
+  char                wifiPSK[32];
 
-  char      mqttHost[253];
-  char      mqttUser[32];
-  char      mqttPassword[32];
-  uint16_t  mqttPort;
+  char                mqttHost[253];
+  char                mqttUser[32];
+  char                mqttPassword[32];
+  uint16_t            mqttPort;
 
-  char      otaHostname[32];
-  char      otaPassword[32];
+  char                otaHostname[32];
+  char                otaPassword[32];
 
-  uint8_t   checksum;
+  char                mqttTopicBakeout[128];
 
-  unsigned long int dwWiFiReconnectInterval;
-  unsigned long int dwMQTTReconnectInterval;
+  uint8_t             checksum;
+
+  unsigned long int   dwWiFiReconnectInterval;
+  unsigned long int   dwMQTTReconnectInterval;
+  unsigned long int   dwReportInterval;
 };
 
 /* Timeout values (i.e. absolute numbers when a timeout will occure */
-static unsigned long dwWiFiCheckTimeout;
-static unsigned long dwMQTTPingTimeout;
+static unsigned long  dwWiFiCheckTimeout;
+static unsigned long  dwMQTTPingTimeout;
 
 /* Network status */
 enum netState {
@@ -95,6 +99,7 @@ struct allStates {
 
   unsigned long int     dwLastWiFiCheckCycle;
   unsigned long int     dwLastMQTTCheckCycle;
+  unsigned long int     dwLastReport;
 };
 
 static unsigned long int dwPWMDutyCycle[PWMCHANNELS] = { 0, 0, 0, 0, 0, 0 };
@@ -108,8 +113,8 @@ static WiFiClient wclient;
 
 /* Webpages */
 
-static const PROGMEM char* htmlConfigPage = "<!DOCTYPE html><html><head><title>PWM controller configuration</title></head><body><h1>PWM controller configuration</h1><form action=\"/config\" method=\"POST\"><h2>Networking</h2><p>Note: This device always uses DHCP</p><table border=\"0\"><tr><td>SSID:</td><td><input type=\"text\" name=\"wifissid\" value=\"%s\"></td></tr><tr><td>PSK:</td><td><input type=\"password\" name=\"wifipsk\" value=\"%s\"></td></tr></table><h2>Over the air update (OTA)</h2><table border=\"0\"><tr><td>Hostname:</td><td><input type=\"text\" name=\"otahost\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"otakey\" value=\"%s\"></td></tr></table><h2>MQTT</h2><table border=\"0\"><tr><td>Host:</td><td><input type=\"text\" name=\"mqtthost\" value=\"%s\"></td></tr><tr><td>User:</td><td><input type=\"text\" name=\"mqttuser\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"mqttpwd\" value=\"%s\"></td></tr><tr><td>Port:</td><td><input type=\"number\" name=\"mqttport\" value=\"%u\"></td></tr></table><h3>MQTT Topics</h3><table border=\"0\"><tr><td>Heater:</td><td><input type=\"text\" name=\"mqtttopic\" value=\"\"></td></tr></table><h2>Intervals</h2><table border=\"0\"><tr><td>WiFi reconnect (s):</td><td><input type=\"number\" name=\"intwifire\" value=\"%u\"></td></tr><tr><td>MQTT reconnect (s):</td><td><input type=\"number\" name=\"intmqttre\" value=\"%u\"></td></tr></table><input type=\"submit\" value=\"Update settings\"></form></body></html>";
-static const PROGMEM char* htmlStatusPage = "<!DOCTYPE html><html><head><title>PWM controller</title></head><body><h1>PWM controller</h1><p> All values are per thousand (percent times 10) </p><form action=\"/\" method=\"POST\"><table border=\"1\"><tr> <td> Channel 1: </td> <td> <input type=\"number\" name=\"chan0\" value=\"%lu\"> </td> </tr><tr> <td> Channel 2: </td> <td> <input type=\"number\" name=\"chan1\" value=\"%lu\"> </td> </tr><tr> <td> Channel 3: </td> <td> <input type=\"number\" name=\"chan2\" value=\"%lu\"> </td> </tr><tr> <td> Channel 4: </td> <td> <input type=\"number\" name=\"chan3\" value=\"%lu\"> </td> </tr><tr> <td> Channel 5: </td> <td> <input type=\"number\" name=\"chan4\" value=\"%lu\"> </td> </tr><tr> <td> Channel 6: </td> <td> <input type=\"number\" name=\"chan5\" value=\"%lu\"> </td> </tr></table><p><input type=\"submit\" value=\"Set values\"></form><p><a href=\"/config\">Configuration</a></p></body></html>";
+static const PROGMEM char* htmlConfigPage = "<!DOCTYPE html><html><head><title>PWM controller configuration</title><style type=\"text/css\"> h1, h2, h3, h4, h5 { background-color: #CCCCCC; letter-spacing: 0.3ex; } </style></head><body><h1>PWM controller configuration</h1><form action=\"/config\" method=\"POST\"><h2>Networking</h2><p>Note: This device always uses DHCP</p><table border=\"0\"><tr><td>SSID:</td><td><input type=\"text\" name=\"wifissid\" value=\"%s\"></td></tr><tr><td>PSK:</td><td><input type=\"password\" name=\"wifipsk\" value=\"%s\"></td></tr></table><h2>Over the air update (OTA)</h2><table border=\"0\"><tr><td>Hostname:</td><td><input type=\"text\" name=\"otahost\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"otakey\" value=\"%s\"></td></tr></table><h2>MQTT</h2><table border=\"0\"><tr><td>Host:</td><td><input type=\"text\" name=\"mqtthost\" value=\"%s\"></td></tr><tr><td>User:</td><td><input type=\"text\" name=\"mqttuser\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"mqttpwd\" value=\"%s\"></td></tr><tr><td>Port:</td><td><input type=\"number\" name=\"mqttport\" value=\"%u\"></td></tr></table><h3>MQTT Topics</h3><table border=\"0\"><tr><td>MQTT topic:</td><td><input type=\"text\" name=\"mqtttopic\" value=\"%s\"></td></tr></table><h2>Intervals</h2><table border=\"0\"><tr><td>WiFi reconnect (s):</td><td><input type=\"number\" name=\"intwifire\" value=\"%u\"></td></tr><tr><td>MQTT reconnect (s):</td><td><input type=\"number\" name=\"intmqttre\" value=\"%u\"></td></tr><tr><td>Reporting interval (s):</td><td><input type=\"number\" name=\"repint\" value=\"%u\"></td></tr></table><input type=\"submit\" value=\"Update settings\"></form></body></html>";
+static const PROGMEM char* htmlStatusPage = "<!DOCTYPE html><html><head><title>PWM controller</title><style type=\"text/css\"> h1, h2, h3, h4, h5 { background-color: #CCCCCC; letter-spacing: 0.3ex; } </style></head><body><h1>PWM controller</h1><p> All values are per thousand (percent times 10) </p><form action=\"/\" method=\"POST\"><table border=\"1\"><tr> <td> Channel 1: </td> <td> <input type=\"number\" name=\"chan0\" value=\"%lu\"> </td> </tr><tr> <td> Channel 2: </td> <td> <input type=\"number\" name=\"chan1\" value=\"%lu\"> </td> </tr><tr> <td> Channel 3: </td> <td> <input type=\"number\" name=\"chan2\" value=\"%lu\"> </td> </tr><tr> <td> Channel 4: </td> <td> <input type=\"number\" name=\"chan3\" value=\"%lu\"> </td> </tr><tr> <td> Channel 5: </td> <td> <input type=\"number\" name=\"chan4\" value=\"%lu\"> </td> </tr><tr> <td> Channel 6: </td> <td> <input type=\"number\" name=\"chan5\" value=\"%lu\"> </td> </tr></table><p><input type=\"submit\" name=\"actionupdate\" value=\"Set values\"></p><p><input type=\"submit\" name=\"actionoff\" value=\"Off\"></p> </form><p><a href=\"/config\">Configuration</a></p></body></html>";
 
 static struct eepromConfiguration cfgCurrent;
 
@@ -124,19 +129,23 @@ static void cfgEEPROMStore(bool bDefaults) {
 
   if(bDefaults) {
     cfgCurrent.flags = eepromConfiguration__DEFAULT__FLAGS;
-    memset(cfgCurrent.wifiSSID,    0, sizeof(cfgCurrent.wifiSSID));
-    memset(cfgCurrent.wifiPSK,     0, sizeof(cfgCurrent.wifiPSK));
+    memset(cfgCurrent.wifiSSID,         0, sizeof(cfgCurrent.wifiSSID));
+    memset(cfgCurrent.wifiPSK,          0, sizeof(cfgCurrent.wifiPSK));
 
-    strcpy(cfgCurrent.otaHostname, defaultName);
-    strcpy(cfgCurrent.otaPassword, defaultName);
+    strcpy(cfgCurrent.otaHostname,      defaultName);
+    strcpy(cfgCurrent.otaPassword,      defaultName);
 
-    cfgCurrent.mqttPort            = 1883;
-    memset(cfgCurrent.mqttHost,    0, sizeof(cfgCurrent.mqttHost));
-    memset(cfgCurrent.mqttUser,    0, sizeof(cfgCurrent.mqttUser));
-    memset(cfgCurrent.mqttPassword,0, sizeof(cfgCurrent.mqttPassword));
+    cfgCurrent.mqttPort                 = 1883;
+
+    memset(cfgCurrent.mqttHost,         0, sizeof(cfgCurrent.mqttHost));
+    memset(cfgCurrent.mqttUser,         0, sizeof(cfgCurrent.mqttUser));
+    memset(cfgCurrent.mqttPassword,     0, sizeof(cfgCurrent.mqttPassword));
+
+    memset(cfgCurrent.mqttTopicBakeout, 0, sizeof(cfgCurrent.mqttTopicBakeout));
 
     cfgCurrent.dwWiFiReconnectInterval  = DEFAULT_INTERVAL__WIFIRECONNECT;
     cfgCurrent.dwMQTTReconnectInterval  = DEFAULT_INTERVAL__MQTTRECONNECT;
+    cfgCurrent.dwReportInterval         = DEFAULT_INTERVAL__REPORT;
   }
   cfgCurrent.checksum = 0;
 
@@ -242,12 +251,22 @@ static void httpHandleNotFound() {
 static void httpHandleStatus() {
   bool bUpdatePWM = false;
 
-  if(server.hasArg("chan0") { dwPWMDutyCycle[0] = httpHandleConfig__ReadValueArgs("chan0", 0, 1000, dwPWMDutyCycle[0]); bUpdatePWM = true; }
-  if(server.hasArg("chan1") { dwPWMDutyCycle[1] = httpHandleConfig__ReadValueArgs("chan1", 0, 1000, dwPWMDutyCycle[1]); bUpdatePWM = true; }
-  if(server.hasArg("chan2") { dwPWMDutyCycle[2] = httpHandleConfig__ReadValueArgs("chan2", 0, 1000, dwPWMDutyCycle[2]); bUpdatePWM = true; }
-  if(server.hasArg("chan3") { dwPWMDutyCycle[3] = httpHandleConfig__ReadValueArgs("chan3", 0, 1000, dwPWMDutyCycle[3]); bUpdatePWM = true; }
-  if(server.hasArg("chan4") { dwPWMDutyCycle[4] = httpHandleConfig__ReadValueArgs("chan4", 0, 1000, dwPWMDutyCycle[4]); bUpdatePWM = true; }
-  if(server.hasArg("chan5") { dwPWMDutyCycle[5] = httpHandleConfig__ReadValueArgs("chan5", 0, 1000, dwPWMDutyCycle[5]); bUpdatePWM = true; }
+  if(!server.hasArg("actionoff")) {
+    if(server.hasArg("chan0")) { dwPWMDutyCycle[0] = httpHandleConfig__ReadValueArgs("chan0", 0, 1000, dwPWMDutyCycle[0]); bUpdatePWM = true; }
+    if(server.hasArg("chan1")) { dwPWMDutyCycle[1] = httpHandleConfig__ReadValueArgs("chan1", 0, 1000, dwPWMDutyCycle[1]); bUpdatePWM = true; }
+    if(server.hasArg("chan2")) { dwPWMDutyCycle[2] = httpHandleConfig__ReadValueArgs("chan2", 0, 1000, dwPWMDutyCycle[2]); bUpdatePWM = true; }
+    if(server.hasArg("chan3")) { dwPWMDutyCycle[3] = httpHandleConfig__ReadValueArgs("chan3", 0, 1000, dwPWMDutyCycle[3]); bUpdatePWM = true; }
+    if(server.hasArg("chan4")) { dwPWMDutyCycle[4] = httpHandleConfig__ReadValueArgs("chan4", 0, 1000, dwPWMDutyCycle[4]); bUpdatePWM = true; }
+    if(server.hasArg("chan5")) { dwPWMDutyCycle[5] = httpHandleConfig__ReadValueArgs("chan5", 0, 1000, dwPWMDutyCycle[5]); bUpdatePWM = true; }
+  } else {
+    dwPWMDutyCycle[0] = 0;
+    dwPWMDutyCycle[1] = 0;
+    dwPWMDutyCycle[2] = 0;
+    dwPWMDutyCycle[3] = 0;
+    dwPWMDutyCycle[4] = 0;
+    dwPWMDutyCycle[5] = 0;
+    bUpdatePWM = true;
+  }
   if(bUpdatePWM) {
       yield();
       pwmSendDutyUpdate();
@@ -274,7 +293,7 @@ static void httpHandleConfig() {
   bool bUpdateAndRestart = false;
 
   /* If present process received data ... */
-  if(server.hasArg("wifissid") && server.hasArg("wifipsk") && server.hasArg("otahost") && server.hasArg("otakey") && server.hasArg("mqtthost") && server.hasArg("mqttuser") && server.hasArg("mqttpwd") && server.hasArg("mqttport") && server.hasArg("mqtttopic") && server.hasArg("intwifire") && server.hasArg("intmqttre") && server.hasArg("intmeas")) {
+  if(server.hasArg("wifissid") && server.hasArg("wifipsk") && server.hasArg("otahost") && server.hasArg("otakey") && server.hasArg("mqtthost") && server.hasArg("mqttuser") && server.hasArg("mqttpwd") && server.hasArg("mqttport") && server.hasArg("mqtttopic") && server.hasArg("intwifire") && server.hasArg("intmqttre") && server.hasArg("repint")) {
     /* Process arguments and update EEPROM - system will reboot after we've delivered the webpage ... */
     strcpy(cfgCurrent.wifiSSID, server.arg("wifissid").c_str());
     strcpy(cfgCurrent.wifiPSK, server.arg("wifipsk").c_str());
@@ -285,6 +304,7 @@ static void httpHandleConfig() {
     strcpy(cfgCurrent.mqttHost, server.arg("mqtthost").c_str());
     strcpy(cfgCurrent.mqttUser, server.arg("mqttuser").c_str());
     strcpy(cfgCurrent.mqttPassword, server.arg("mqttpwd").c_str());
+
     {
       unsigned int newPort = cfgCurrent.mqttPort;
       sscanf(server.arg("mqttport").c_str(), "%u", &newPort);
@@ -293,8 +313,11 @@ static void httpHandleConfig() {
       }
     }
 
+    strcpy(cfgCurrent.mqttTopicBakeout, server.arg("mqtttopic").c_str());
+
     cfgCurrent.dwWiFiReconnectInterval    = httpHandleConfig__ReadValueArgs("intwifire",    5,   3600,  cfgCurrent.dwWiFiReconnectInterval    );
     cfgCurrent.dwMQTTReconnectInterval    = httpHandleConfig__ReadValueArgs("intmqttre",    5,   3600,  cfgCurrent.dwWiFiReconnectInterval    );
+    cfgCurrent.dwReportInterval           = httpHandleConfig__ReadValueArgs("repint",       5,    300,  cfgCurrent.dwReportInterval           );
 
     bUpdateAndRestart = true;
   }
@@ -311,8 +334,10 @@ static void httpHandleConfig() {
     cfgCurrent.mqttUser,
     cfgCurrent.mqttPassword,
     cfgCurrent.mqttPort,
+    cfgCurrent.mqttTopicBakeout,
     cfgCurrent.dwWiFiReconnectInterval,
-    cfgCurrent.dwMQTTReconnectInterval
+    cfgCurrent.dwMQTTReconnectInterval,
+    cfgCurrent.dwReportInterval
   );
   server.sendHeader("Cache-control", "no-cache, no-store, must-revalicate");
   server.sendHeader("Pragma", "no-cache");
@@ -608,14 +633,14 @@ static void pwmSendDutyUpdate() {
   MQTT
 */
 static Adafruit_MQTT_Client* mqttConnection = NULL;
-// static Adafruit_MQTT_Publish* mqttTopicOutCO2 = NULL; /* (&mqtt, "automation.hehuette.livingroom.motion.sens01"); */
+static Adafruit_MQTT_Publish* mqttTopicBakeout = NULL;
 
 static void mqttInit() {
   if(mqttConnection != NULL) {
-/*    if(mqttTopicOutCO2 != NULL) {
-      delete mqttTopicOutCO2;
-      mqttTopicOutCO2 = NULL;
-    } */
+    if(mqttTopicBakeout != NULL) {
+      delete mqttTopicBakeout;
+      mqttTopicBakeout = NULL;
+    }
     mqttConnection->disconnect();
     delay(250);
     delete mqttConnection;
@@ -625,27 +650,26 @@ static void mqttInit() {
   mqttConnection = new Adafruit_MQTT_Client(&wclient, cfgCurrent.mqttHost, cfgCurrent.mqttPort, cfgCurrent.mqttUser, cfgCurrent.mqttPassword);
   mqttConnection->connect();
 
-/*  if((mqttTopicOutCO2 == NULL) && (strlen(cfgCurrent.mqttTopicCO2) > 0)) {
-    mqttTopicOutCO2 = new Adafruit_MQTT_Publish(mqttConnection, cfgCurrent.mqttTopicCO2);
-  } */
+  if((mqttTopicBakeout == NULL) && (strlen(cfgCurrent.mqttTopicBakeout) > 0)) {
+    mqttTopicBakeout = new Adafruit_MQTT_Publish(mqttConnection, cfgCurrent.mqttTopicBakeout);
+  }
 }
 
-#if 0
-  static void mqttPublish(
-    unsigned long int dwPPM,
-    unsigned long int dwCelsius
-  ) {
-    if((mqttTopicOutCO2 != NULL) && (mqttConnection->connected())) {
-      String rep = "{ \"co2\" : \"";
-      rep += dwPPM;
-      rep += "\", \"temperature\" : \"";
-      rep += dwCelsius;
-      rep += "\" }";
-
-      mqttTopicOutCO2->publish(rep.c_str());
+static void mqttPublish() {
+  unsigned long int i;
+  if((mqttTopicBakeout != NULL) && (mqttConnection->connected())) {
+    String rep = "{ \"channels\" : [ ";
+    for(i = 0; i < PWMCHANNELS; i=i+1) {
+      rep += dwPWMDutyCycle[i];
+      if(i != (PWMCHANNELS-1)) {
+        rep += ",";
+      }
     }
+    rep += " ] }";
+    mqttTopicBakeout->publish(rep.c_str());
+    currentState.dwLastReport = millis();
   }
-#endif
+}
 
 /*
   =======================
@@ -660,6 +684,7 @@ void setup() {
   currentState.netStatus            = netState_Disconnect;
   currentState.dwLastWiFiCheckCycle = millis();
   currentState.otaUpdateRunning     = false;
+  currentState.dwLastReport         = millis();
 
   {
     byte mac[6];
@@ -691,6 +716,12 @@ void loop(void) {
       return;
     }
   #endif
+
+  if(currentState.dwLastReport < currentMillis) {
+    dwMeasElapsed = currentMillis - currentState.dwLastReport;
+  } else {
+    dwMeasElapsed = ((~0) - currentState.dwLastReport) + currentMillis;
+  }
 
   if(currentState.dwLastWiFiCheckCycle < currentMillis) {
     dwWiFiCheckElapsed = currentMillis - currentState.dwLastWiFiCheckCycle;
@@ -748,12 +779,10 @@ void loop(void) {
       if(mqttConnection ->connected()) {
         currentState.netStatus = netState_MQTTConnected;
       } else {
-        /*
-        if(mqttTopicOutCO2 != NULL) {
-          delete mqttTopicOutCO2;
-          mqttTopicOutCO2 = NULL;
+        if(mqttTopicBakeout != NULL) {
+          delete mqttTopicBakeout;
+          mqttTopicBakeout = NULL;
         }
-        */
         mqttConnection->disconnect();
         delay(125);
         delete mqttConnection;
@@ -776,6 +805,13 @@ void loop(void) {
     delay(10000);
     cfgEEPROMStore(true);
     ESP.restart();
+  }
+
+  /*
+    Check for MQTT reporting interval
+   */
+  if((currentState.netStatus == netState_MQTTConnected) && (dwMeasElapsed > cfgCurrent.dwReportInterval*1000)) {
+    mqttPublish();
   }
 
   serialHandleEvents();
