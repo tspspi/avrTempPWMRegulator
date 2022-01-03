@@ -108,7 +108,7 @@ static WiFiClient wclient;
 
 /* Webpages */
 
-static const PROGMEM char* htmlConfigPage = "<!DOCTYPE html><html><head><title>PWM controller configuration</title></head><body><h1>PWM controller configuration</h1><form action=\"/config\" method=\"POST\"><h2>Networking</h2><p>Note: This device always uses DHCP</p><table border=\"0\"><tr><td>SSID:</td><td><input type=\"text\" name=\"wifissid\" value=\"%s\"></td></tr><tr><td>PSK:</td><td><input type=\"password\" name=\"wifipsk\" value=\"%s\"></td></tr></table><h2>Over the air update (OTA)</h2><table border=\"0\"><tr><td>Hostname:</td><td><input type=\"text\" name=\"otahost\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"otakey\" value=\"%s\"></td></tr></table><h2>MQTT</h2><table border=\"0\"><tr><td>Host:</td><td><input type=\"text\" name=\"mqtthost\" value=\"%s\"></td></tr><tr><td>User:</td><td><input type=\"text\" name=\"mqttuser\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"mqttpwd\" value=\"%s\"></td></tr><tr><td>Port:</td><td><input type=\"number\" name=\"mqttport\" value=\"%u\"></td></tr></table><h3>MQTT Topics</h3><table border=\"0\"><tr><td>Heater:</td><td><input type=\"text\" name=\"mqtttopic\" value=\"\"></td></tr></table><h2>Intervals</h2><table border=\"0\"><tr><td>WiFi reconnect (s):</td><td><input type=\"number\" name=\"intwifire\" value=\"%u\"></td></tr><tr><td>MQTT reconnect (s):</td><td><input type=\"number\" name=\"intmqttre\" value=\"%u\"></td></tr><tr><td>CO2 measurement (s):</td><td><input type=\"number\" name=\"intmeas\" value=\"\"></td></tr></table><input type=\"submit\" value=\"Update settings\"></form></body></html>";
+static const PROGMEM char* htmlConfigPage = "<!DOCTYPE html><html><head><title>PWM controller configuration</title></head><body><h1>PWM controller configuration</h1><form action=\"/config\" method=\"POST\"><h2>Networking</h2><p>Note: This device always uses DHCP</p><table border=\"0\"><tr><td>SSID:</td><td><input type=\"text\" name=\"wifissid\" value=\"%s\"></td></tr><tr><td>PSK:</td><td><input type=\"password\" name=\"wifipsk\" value=\"%s\"></td></tr></table><h2>Over the air update (OTA)</h2><table border=\"0\"><tr><td>Hostname:</td><td><input type=\"text\" name=\"otahost\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"otakey\" value=\"%s\"></td></tr></table><h2>MQTT</h2><table border=\"0\"><tr><td>Host:</td><td><input type=\"text\" name=\"mqtthost\" value=\"%s\"></td></tr><tr><td>User:</td><td><input type=\"text\" name=\"mqttuser\" value=\"%s\"></td></tr><tr><td>Password:</td><td><input type=\"password\" name=\"mqttpwd\" value=\"%s\"></td></tr><tr><td>Port:</td><td><input type=\"number\" name=\"mqttport\" value=\"%u\"></td></tr></table><h3>MQTT Topics</h3><table border=\"0\"><tr><td>Heater:</td><td><input type=\"text\" name=\"mqtttopic\" value=\"\"></td></tr></table><h2>Intervals</h2><table border=\"0\"><tr><td>WiFi reconnect (s):</td><td><input type=\"number\" name=\"intwifire\" value=\"%u\"></td></tr><tr><td>MQTT reconnect (s):</td><td><input type=\"number\" name=\"intmqttre\" value=\"%u\"></td></tr></table><input type=\"submit\" value=\"Update settings\"></form></body></html>";
 static const PROGMEM char* htmlStatusPage = "<!DOCTYPE html><html><head><title>PWM controller</title></head><body><h1>PWM controller</h1><p> All values are per thousand (percent times 10) </p><form action=\"/\" method=\"POST\"><table border=\"1\"><tr> <td> Channel 1: </td> <td> <input type=\"number\" name=\"chan0\" value=\"%lu\"> </td> </tr><tr> <td> Channel 2: </td> <td> <input type=\"number\" name=\"chan1\" value=\"%lu\"> </td> </tr><tr> <td> Channel 3: </td> <td> <input type=\"number\" name=\"chan2\" value=\"%lu\"> </td> </tr><tr> <td> Channel 4: </td> <td> <input type=\"number\" name=\"chan3\" value=\"%lu\"> </td> </tr><tr> <td> Channel 5: </td> <td> <input type=\"number\" name=\"chan4\" value=\"%lu\"> </td> </tr><tr> <td> Channel 6: </td> <td> <input type=\"number\" name=\"chan5\" value=\"%lu\"> </td> </tr></table><p><input type=\"submit\" value=\"Set values\"></form><p><a href=\"/config\">Configuration</a></p></body></html>";
 
 static struct eepromConfiguration cfgCurrent;
@@ -252,7 +252,7 @@ static void httpHandleStatus() {
     pwmSendDutyUpdate();
     yield();
   }
-  
+
   sprintf(
     pageTemp,
     htmlStatusPage,
@@ -263,7 +263,7 @@ static void httpHandleStatus() {
     dwPWMDutyCycle[4],
     dwPWMDutyCycle[5]
   );
-  server.sendHeader("Refresh", "15; url=/");
+  server.sendHeader("Refresh", "60; url=/");
   server.sendHeader("Cache-control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.send(200, "text/html", pageTemp);
@@ -277,7 +277,7 @@ static void httpHandleConfig() {
     /* Process arguments and update EEPROM - system will reboot after we've delivered the webpage ... */
     strcpy(cfgCurrent.wifiSSID, server.arg("wifissid").c_str());
     strcpy(cfgCurrent.wifiPSK, server.arg("wifipsk").c_str());
-    
+
     strcpy(cfgCurrent.otaHostname, server.arg("otahost").c_str());
     strcpy(cfgCurrent.otaPassword, server.arg("otakey").c_str());
 
@@ -640,7 +640,7 @@ static void mqttInit() {
       rep += "\", \"temperature\" : \"";
       rep += dwCelsius;
       rep += "\" }";
-  
+
       mqttTopicOutCO2->publish(rep.c_str());
     }
   }
