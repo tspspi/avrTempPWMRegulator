@@ -8,6 +8,11 @@
 struct pwmOutputState pwmState[PWMCHANNELS_MAX];
 unsigned long int dwPWMLastTick;
 unsigned long int dwPWMTickDuration;
+unsigned long int dwConfiguredChannelCount;
+
+unsigned long int pwmGetConfiguredChannelCount() {
+	return dwConfiguredChannelCount;
+}
 
 void pwmInit(
     unsigned long int dwTickLength,
@@ -65,6 +70,8 @@ void pwmInit(
 
     dwPWMLastTick = millis();
     dwPWMTickDuration = dwTickLength;
+
+		dwConfiguredChannelCount = dwChannels;
 }
 
 void pwmTickLoop() {

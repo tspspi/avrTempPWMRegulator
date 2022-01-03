@@ -49,11 +49,12 @@ static struct pwmConfiguration pwmPorts[] = {
 
 int main() {
     systickInit();
+		sei();
 
-    pwmInit(4, true, sizeof(pwmPorts) / sizeof(struct pwmConfiguration), pwmPorts);
-    serialInit();
+		pwmInit(4, true, sizeof(pwmPorts) / sizeof(struct pwmConfiguration), pwmPorts);
 
-    pwmSet(0, 500);
+		serialInit();
+
 
     /*
         GPIO setup

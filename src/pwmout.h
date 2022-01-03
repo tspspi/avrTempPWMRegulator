@@ -101,6 +101,8 @@ void pwmSet(
     unsigned long int dwPermille
 );
 
+unsigned long int pwmGetConfiguredChannelCount();
+
 #ifdef __cplusplus
 	} /* extern "C" { */
 #endif

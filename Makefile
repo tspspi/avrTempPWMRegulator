@@ -15,8 +15,9 @@ bin/avr_tempregulator.hex: bin/avr_tempregulator.bin
 
 flash: bin/avr_tempregulator.hex
 
-	sudo chmod 666 $(FLASHDEV)
-	avrdude -v -p atmega328p -c avrisp -P /dev/ttyU0 -b 57600 -D -U flash:w:bin/avr_tempregulator.hex:i
+#	sudo chmod 666 $(FLASHDEV)
+#	avrdude -v -p atmega328p -c avrisp -P /dev/ttyU0 -b 57600 -D -U flash:w:bin/avr_tempregulator.hex:i
+	avrdude -v -p atmega328p -c arduino -P COM9 -b 57600 -e -U flash:w:bin/avr_tempregulator.hex:i
 
 framac: src/avr_tempregulator.c src/sysclk.c src/pwmout.c src/serial.c
 

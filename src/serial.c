@@ -1,4 +1,7 @@
+#include <string.h>
+
 #include "./serial.h"
+#include "./pwmout.h"
 
 #ifdef __cplusplus
 	extern "C" {
@@ -37,6 +40,8 @@ static void ringBuffer_WriteChars(
     unsigned long int dwLen
 );
 
+void serialModeTX0();
+
 /*
 	The ringbuffers themselves
 */
@@ -52,11 +57,10 @@ static uint8_t serialMessageBuffer[SERIAL_MAX_PACKET_SIZE];
 
 
 void serialTransmitPacket(
-	char* lpPayload,
+	unsigned char* lpPayload,
 	unsigned long int dwPayloadLength,
 	uint8_t respCode
 ) {
-	uint8_t dwLenField;
 	uint8_t chkSum = 0x00;
 	unsigned long int i;
 
@@ -65,15 +69,14 @@ void serialTransmitPacket(
 	ringBuffer_WriteChar(&serialRB0_TX, (uint8_t)(dwPayloadLength + 5)); chkSum = chkSum ^ (uint8_t)(dwPayloadLength + 5);
 	ringBuffer_WriteChar(&serialRB0_TX, respCode); chkSum = chkSum ^ respCode;
 	if(dwPayloadLength > 0) {
-		ringBuffer_WriteChars(&serialRB0_TX, lpPayload, dwPayloadLength);
+		ringBuffer_WriteChars(&serialRB0_TX, (unsigned char*)lpPayload, dwPayloadLength);
 		for(i = 0; i < dwPayloadLength; i=i+1) {
 			chkSum = chkSum ^ lpPayload[i];
 		}
 	}
 	ringBuffer_WriteChar(&serialRB0_TX, chkSum);
+	serialModeTX0();
 }
-
-
 
 void serialHandleMessage_UnknownOrError() {
 	return;
@@ -85,19 +88,49 @@ void serialHandleMessage_Identify(unsigned long int dwLength) {
 	if(dwLength != 2) {
 		serialHandleMessage_UnknownOrError();
 	} else {
-		serialTransmitPacket(serialHandleMessage_Identify_Response, strlen(serialHandleMessage_Identify_Response), SERIAL_RESPCCODE_ID);
+		serialTransmitPacket((unsigned char*)serialHandleMessage_Identify_Response, strlen(serialHandleMessage_Identify_Response), SERIAL_RESPCODE_ID);
+	}
+}
+
+void serialHandleMessage_GetChannelCount(unsigned long int dwLength) {
+	uint8_t channelCount = (uint8_t)pwmGetConfiguredChannelCount();
+
+	if(dwLength != 2) {
+		serialHandleMessage_UnknownOrError();
+	} else {
+		serialTransmitPacket(&channelCount, 1, SERIAL_RESPCODE_GETCHANNELCOUNT);
+	}
+}
+
+void serialHandleMessage_SetDuty(dwMessageSize) {
+	unsigned long int i;
+
+	if(dwMessageSize > (2 + PWMCHANNELS_MAX*2)) {
+		serialHandleMessage_UnknownOrError();
+	} else {
+		unsigned long int dwSubmittedChannels = (dwMessageSize - 2) >> 1;
+dwSubmittedChannels = 6; // Quick hack ...
+		for(i = 0; i < dwSubmittedChannels; i=i+1) {
+			uint16_t currentValue = (((uint16_t)serialMessageBuffer[2 + (i << 1)]) & 0x00FF) | ((((uint16_t)serialMessageBuffer[2 + (i << 1) + 1]) << 8) & 0xFF00);
+
+			if(currentValue > 1000) { currentValue = 1000; }
+
+			pwmSet(i, currentValue);
+		}
 	}
 }
 
 void serialHandleMessage(
 	unsigned long int dwMessageSize
 ) {
-	uint8_t dwPacketLen = serialMessageBuffer[0];
+	// uint8_t dwPacketLen = serialMessageBuffer[0];
 	uint8_t dwOpCode = serialMessageBuffer[1];
 
 	switch(dwOpCode) {
-		case SERIAL_OPCODE_ID:		serialHandleMessage_Identify(dwMessageSize);
-		default:					serialHandleMessage_UnknownOrError();
+		case SERIAL_OPCODE_ID:							serialHandleMessage_Identify(dwMessageSize); break;
+		case SERIAL_OPCODE_GETCHANNELCOUNT:	serialHandleMessage_GetChannelCount(dwMessageSize); break;
+		case SERIAL_OPCODE_SETDUTY:					serialHandleMessage_SetDuty(dwMessageSize); break;
+		default:														serialHandleMessage_UnknownOrError();
 	}
 }
 
@@ -106,7 +139,7 @@ void serialHandleEvents() {
 	unsigned long int i;
 
 	dwAvailableLength = ringBuffer_AvailableN(&serialRB0_RX);
-    if(dwAvailableLength < 5) { return; } /* We cannot even see a full packet ... */
+	if(dwAvailableLength < 5) { return; } /* We cannot even see a full packet ... */
 
 	while((ringBuffer_PeekChar(&serialRB0_RX) != 0xAA) && (ringBuffer_PeekCharN(&serialRB0_RX, 1) != 0x55) && (ringBuffer_AvailableN(&serialRB0_RX) >= 5)) {
 		ringBuffer_discardN(&serialRB0_RX, 1); /* Skip next character */
@@ -302,17 +335,16 @@ void serialInit() {
     #endif
 
 	ringBuffer_Init(&serialRB0_TX);
-    ringBuffer_Init(&serialRB0_RX);
+	ringBuffer_Init(&serialRB0_RX);
 	serialRX0Flag = 0;
 
-    UBRR0   = 103; // 16 : 115200, 103: 19200
-    UCSR0A  = 0x02;
-    UCSR0B  = 0x10 | 0x80; /* Enable receiver and RX interrupt */
-    UCSR0C  = 0x06;
+	UBRR0   = 16; // 16 : 115200, 103: 19200
+	UCSR0A  = 0x02;
+	UCSR0B  = 0x10 | 0x80; /* Enable receiver and RX interrupt */
+	UCSR0C  = 0x06;
 
-    SREG = sregOld;
-
-    return;
+	SREG = sregOld;
+	return;
 }
 
 ISR(USART_RX_vect) {
