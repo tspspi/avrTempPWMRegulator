@@ -58,14 +58,14 @@ void pwmInit(
     */
     for(i = 0; i < dwChannels; i=i+1) {
         pwmState[i].pwmOffset = i * dwOffsetStepSize;
-        pwmState[i].avrPort = lpPortConfiguration->avrPort;
-        pwmState[i].avrPin = lpPortConfiguration->avrPin;
+        pwmState[i].avrPort = lpPortConfiguration[i].avrPort;
+        pwmState[i].avrPin = lpPortConfiguration[i].avrPin;
 
         /*
             Set pin mode to output and pull low (disable output))
         */
-        lpPortConfiguration->avrPortDDR[0] = lpPortConfiguration->avrPortDDR[0] | lpPortConfiguration->avrPin;
-        lpPortConfiguration->avrPort[0] = lpPortConfiguration->avrPort[0] & (~(lpPortConfiguration->avrPin));
+        lpPortConfiguration[i].avrPortDDR[0] = lpPortConfiguration[i].avrPortDDR[0] | lpPortConfiguration[i].avrPin;
+        lpPortConfiguration[i].avrPort[0] = lpPortConfiguration[i].avrPort[0] & (~(lpPortConfiguration[i].avrPin));
     }
 
     dwPWMLastTick = millis();
