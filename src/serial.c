@@ -102,7 +102,7 @@ void serialHandleMessage_GetChannelCount(unsigned long int dwLength) {
 	}
 }
 
-void serialHandleMessage_SetDuty(dwMessageSize) {
+void serialHandleMessage_SetDuty(unsigned long int dwMessageSize) {
 	unsigned long int i;
 
 	if(dwMessageSize > (2 + PWMCHANNELS_MAX*2)) {
