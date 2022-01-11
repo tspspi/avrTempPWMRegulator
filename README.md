@@ -33,6 +33,12 @@ spawns its own configuration WiFi that one can use to access the configuration
 page on ```192.168.4.1```. After joining the WiFi the device is configured
 using DHCP and is accessible via plain HTTP (no HTTPS) on port 80.
 
+### Sample test setup
+
+![Controller setup](https://raw.githubusercontent.com/tspspi/avrTempPWMRegulator/master/readmeassets/testsetup01.jpg)
+
+![SSR setup](https://raw.githubusercontent.com/tspspi/avrTempPWMRegulator/master/readmeassets/testsetup02.jpg)
+
 ## Serial protocol
 
 All serial messages start with at least a synchronization pattern ```0xAA, 0x55```.
