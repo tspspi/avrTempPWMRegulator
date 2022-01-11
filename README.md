@@ -1,30 +1,37 @@
 # PWM Temperature regulator
 
-This is a small PID temperature regulator that's controlled by an AVR. Basically
-it's an PWM regulator that gets temperature feedback. For each control channel
-there are up to two measured temperature values. Each channel can have a different
-target temperature value and a different slope limit.
-
-The controller ensures that:
-
-* The temperature difference between both channels (if both are enabled) stays
-  below a certain limit
-* The temperature increase and decrease has a limited gradient (since this
-  controller is used for vacuum control). Thus the target temperature is also
-  only slowly increased and decreased - this is implemented by simply having
-  a target value and a current target. Whenever the actual reaches the current
-  target the current target is moved into the direction of the target value
+Currently this project contains sourcecode for an AVR and ESP8266 based PWM
+temperature controller - in it's current state it's a simple remote controlled
+PWM board that switches an array of SSRs to regulate the amount of electrical
+power supplied.
 
 ## PWM frequency
 
 Since the control is done primary side on a pretty slow (thermal) system the PWM
-timeslice has been decided to be around 4 seconds (0.25 Hz) with a controlable
-duty cycle from 0-100 percent.
+timeslice has been decided to be around 2 seconds (0.5 Hz) with a controllable
+duty cycle from 0-100 percent in 0.1 percent steps.
 
 The PWM module works synchronously - on every iteration it simply checks if the
-next PWM clock cycle has ellapsed (every 40 ms - i.e. every 800000 clock cycle
+next PWM clock cycle has elapsed (every 2 ms - i.e. every 40000 clock cycle
 thus I won't use a timer; introduces some jitter but for this application it's
 neglectable)
+
+## Structure
+
+The project is based on simple firmware for an ATMega328P that performs PWM and
+talks to an external controller using it's serial port with the serial protocol
+described below.
+
+A simple controller is supplied in ```ESP8266Controller``` that is designed to
+run on an ESP8266 that is connected via WiFi to some network that allows one
+to set parameters using a webinterface or MQTT. Currently MQTT is in development
+and not fully functional though. Since this is rather easy this part uses the
+Arduino framework for the ESP8266.
+
+On first boot (or factory reset triggered by a button on GPIO0) the controller
+spawns its own configuration WiFi that one can use to access the configuration
+page on ```192.168.4.1```. After joining the WiFi the device is configured
+using DHCP and is accessible via plain HTTP (no HTTPS) on port 80.
 
 ## Serial protocol
 
@@ -47,9 +54,11 @@ pattern again.
 
 ### OpCodes assigned
 
-| Code | Operation |
-| ---- | --------- |
-| 0x01 | Identify  |
+| Code | Operation         |
+| ---- | ----------------- |
+| 0x01 | Identify          |
+| 0x02 | Get channel count |
+| 0x03 | Set duty cycle    |
 
 ### Response codes assigned
 
@@ -57,6 +66,7 @@ pattern again.
 | ---- | ---------------------------------------- |
 | 0x01 | Error packet including 1 byte error code |
 | 0x02 | Identify response                        |
+| 0x03 | Get channel count response               |
 
 ### Identification command (Operation code 0x01, response code 0x01)
 
